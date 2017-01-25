@@ -16,13 +16,6 @@ let s:max_breakpoint_sign_id = 5000
 
 let s:GdbServer = {}
 
-function! <SID>FileNameFilter(filename)
-	let file = substitute(a:filename, '\v/(\w|/|-)+/src/', '', '')
-	let file = substitute(file, '\r', '', '')
-
-	return file
-endfunction
-
 function s:GdbServer.new(gdb)
 	let this = copy(self)
 	let this._gdb = a:gdb
@@ -34,12 +27,11 @@ function s:GdbServer.on_exit()
 endfunction
 
 let s:GdbPaused = vimexpect#State([
+			\ ['\v[\o32]{2}([^:]+):(\d+):\d+', 'jump'],
 			\ ['Continuing.', 'continue'],
 			\ ['Starting program', 'continue'],
-			\ ['\v[\o32]{2}([^:]+):(\d+):\d+', 'jump'],
 			\ ['\v^Breakpoint (\d+) at 0[xX]\x+: file ([^,]+), line (\d+)', 'mybreak'],
 			\ ['\v^Breakpoint (\d+) at 0[xX]\x+: ([^:]+):(\d+)', 'mybreak'],
-			\ ['Remote communication error.  Target disconnected.:', 'retry'],
 			\ ])
 
 function s:GdbPaused.continue(...)
@@ -47,8 +39,35 @@ function s:GdbPaused.continue(...)
 	call self.update_current_line_sign(0)
 endfunction
 
+function! <SID>GetLocalFilePath(file)
+	let paths = split(split(a:file, ':')[0], '/')
+
+	let file_path = ""
+	for i in range(-1, -len(paths), -1)
+		let search_pattern = "**/" . join(paths[i:], '/')
+		let res = split(globpath(getcwd(), search_pattern))
+		if len(res) == 0
+			return file_path
+		endif
+
+		if len(res) == 1
+			let file_path = res[0]
+			break
+		endif
+	endfor
+
+	if !empty(file_path)
+		let file_path = fnamemodify(file_path, ":~:.")
+	endif
+
+	return file_path
+endfunction
+
 function s:GdbPaused.jump(file, line, ...)
-	let file = <SID>FileNameFilter(a:file)
+	let file = <SID>GetLocalFilePath(a:file)
+	if empty(file)
+		return -1
+	endif
 
 	let window = winnr()
 	exe self._jump_window 'wincmd w'
@@ -64,17 +83,9 @@ function s:GdbPaused.jump(file, line, ...)
 	call self.update_current_line_sign(1)
 endfunction
 
-function s:GdbPaused.retry(...)
-	if self._server_exited
-		return
-	endif
-	sleep 1
-	call self.attach()
-	call self.send('continue')
-endfunction
-
 let s:GdbRunning = vimexpect#State([
 			\ ['\v^Breakpoint \d+,', 'pause'],
+			\ ['\vhit Breakpoint \d+, ', 'pause'],
 			\ ['\v^Temporary breakpoint \d+,', 'pause'],
 			\ ['\v\[Inferior\ +.{-}\ +exited\ +normally', 'disconnected'],
 			\ ['(gdb)', 'pause'],
@@ -125,8 +136,9 @@ function s:GdbRunning.pause(...)
 	call self._parser.switch(s:GdbPaused)
 	if !self._initialized
 		call self.send('set confirm off')
-		call self.send('set pagination off')
-		call self.send('cls')
+		" call self.send('set pagination off')
+		" call self.send('set scheduler-locking on')
+		call self.send('shell clear')
 		let self._initialized = 1
 	endif
 endfunction
@@ -232,12 +244,22 @@ function! s:Spawn(server_host, client_cmd)
 		let gdb._client_id = termopen(a:client_cmd, gdb)
 	else
 		let gdb._client_id = termopen('zsh', gdb)
-		call jobsend(gdb._client_id, "ssh " .a:server_host. "\<cr>")
 
 		if has_key(g:nvimgdb_host_cmd, a:server_host)
-			for cmd in g:nvimgdb_host_cmd[a:server_host]
+			let commands = g:nvimgdb_host_cmd[a:server_host]
+
+			if commands[0] == 'Docker'
+				call jobsend(gdb._client_id, "docker exec -it " .a:server_host. " bash\<cr>")
+				let commands = commands[1:]
+			else
+				call jobsend(gdb._client_id, "ssh " .a:server_host. "\<cr>")
+			endif
+
+			for cmd in commands
 				call jobsend(gdb._client_id, cmd . "\<cr>")
 			endfor
+		else
+			call jobsend(gdb._client_id, "ssh " .a:server_host. "\<cr>")
 		endif
 	endif
 
@@ -389,7 +411,7 @@ function! <SID>GetCppCword()
 endfunction
 
 command! -nargs=1 -complete=file GdbStart call s:Spawn(0, printf("gdb -q -f %s", <q-args>))
-command! -nargs=1 GdbSsh call s:Spawn(<q-args>, 0)
+command! -nargs=1 GdbConnect call s:Spawn(<q-args>, 0)
 command! GdbZsh call s:Spawn(0, "zsh")
 command! GdbWin call s:GetGdbWin()
 command! GdbSetBreaks call s:SetBreakpoints()
