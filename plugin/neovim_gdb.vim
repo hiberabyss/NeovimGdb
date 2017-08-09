@@ -2,15 +2,11 @@ if !exists('g:nvimgdb_host_cmd')
 	let g:nvimgdb_host_cmd = {}
 endif
 
-if !has('nvim')
-	finish
-endif
+if !has('nvim') | finish | endif
 
 sign define GdbBreakpoint text=●
 sign define GdbCurrentLine text=⇒
 
-let s:gdb_port = 7778
-let s:run_gdb = printf("gdb -q -f %s.elf", expand('%:r'))
 let s:breakpoints = {}
 let s:max_breakpoint_sign_id = 5000
 
@@ -32,6 +28,16 @@ let s:GdbPaused = vimexpect#State([
 			\ ['Starting program', 'continue'],
 			\ ['\v^Breakpoint (\d+) at 0[xX]\x+: file ([^,]+), line (\d+)', 'mybreak'],
 			\ ['\v^Breakpoint (\d+) at 0[xX]\x+: ([^:]+):(\d+)', 'mybreak'],
+			\ ])
+
+let s:GdbRunning = vimexpect#State([
+			\ ['\v^Breakpoint \d+,', 'pause'],
+			\ ['\vhit Breakpoint \d+, ', 'pause'],
+			\ ['\v^Temporary breakpoint \d+,', 'pause'],
+			\ ['\vhit Hardware ', 'pause'],
+			\ ['(gdb)', 'pause'],
+			\ ['gdb\$', 'pause'],
+			\ ['\v\[Inferior\ +.{-}\ +exited\ +normally', 'disconnected'],
 			\ ])
 
 function s:GdbPaused.continue(...)
@@ -64,10 +70,12 @@ function! <SID>GetLocalFilePath(file)
 endfunction
 
 function s:GdbPaused.jump(file, line, ...)
-	let file = <SID>GetLocalFilePath(a:file)
-	if empty(file)
-		return -1
+	let file = a:file
+	if !empty(g:gdb._server_addr)
+		let file = <SID>GetLocalFilePath(file)
 	endif
+
+	if empty(file) | return -1 | endif
 
 	let window = winnr()
 	exe self._jump_window 'wincmd w'
@@ -82,15 +90,6 @@ function s:GdbPaused.jump(file, line, ...)
 	exe window 'wincmd w'
 	call self.update_current_line_sign(1)
 endfunction
-
-let s:GdbRunning = vimexpect#State([
-			\ ['\v^Breakpoint \d+,', 'pause'],
-			\ ['\vhit Breakpoint \d+, ', 'pause'],
-			\ ['\v^Temporary breakpoint \d+,', 'pause'],
-			\ ['\v\[Inferior\ +.{-}\ +exited\ +normally', 'disconnected'],
-			\ ['(gdb)', 'pause'],
-			\ ['gdb\$', 'pause'],
-			\ ])
 
 function! <SID>ToggleBreakpoint()
 	if !exists('g:gdb') | return | endif
@@ -136,8 +135,6 @@ function s:GdbRunning.pause(...)
 	call self._parser.switch(s:GdbPaused)
 	if !self._initialized
 		call self.send('set confirm off')
-		" call self.send('set pagination off')
-		" call self.send('set scheduler-locking on')
 		call self.send('shell clear')
 		let self._initialized = 1
 	endif
@@ -148,7 +145,7 @@ function s:GdbRunning.disconnected(...)
 		" Refresh to force a delete of all watchpoints
 		call s:RefreshBreakpoints()
 		sleep 1
-		call self.attach()
+		" call self.attach()
 		call self.send('continue')
 	endif
 endfunction
@@ -195,10 +192,6 @@ function! s:Gdb.sendRaw(data)
 	call jobsend(self._client_id, a:data)
 endfunction
 
-function! s:Gdb.attach()
-	call self.send(printf('target remote %s', self._server_addr))
-endfunction
-
 function! s:Gdb.update_current_line_sign(add)
 	" to avoid flicker when removing/adding the sign column(due to the change in
 	" line width), we switch ids for the line sign and only remove the old line
@@ -225,7 +218,7 @@ function! s:Spawn(server_host, client_cmd)
 		throw 'Gdb already running'
 	endif
 	let gdb = vimexpect#Parser(s:GdbRunning, copy(s:Gdb))
-	let gdb._server_addr = 0
+	let gdb._server_addr = a:server_host
 	let gdb._reconnect = 0
 	let gdb._initialized = 0
 	let gdb._jump_window = 1
@@ -396,7 +389,7 @@ endfunction
 
 function! s:CreateToggleBreak()
 	if !exists('g:gdb')
-		call s:Spawn(0, printf("gdb -q -f %s.elf", expand('%:r')))
+		call s:Spawn(0, printf("gdb -q -f %s.bin", expand('%:r')))
 		sleep 100m
 	endif
 	call s:ToggleBreak()
@@ -410,7 +403,13 @@ function! <SID>GetCppCword()
 	return cword
 endfunction
 
-command! -nargs=1 -complete=file GdbStart call s:Spawn(0, printf("gdb -q -f %s", <q-args>))
+let g:local_gdb_cmd = "gdb -q -f"
+
+if has('mac')
+	let g:local_gdb_cmd = "sudo " .g:local_gdb_cmd
+endif
+
+command! -nargs=1 -complete=file GdbStart call s:Spawn(0, printf(g:local_gdb_cmd . " %s", <q-args>))
 command! -nargs=1 GdbConnect call s:Spawn(<q-args>, 0)
 command! GdbZsh call s:Spawn(0, "zsh")
 command! GdbWin call s:GetGdbWin()
@@ -439,10 +438,7 @@ nnoremap <silent> ;gk :GdbDebugStop<cr>
 nnoremap <silent> ;gb :call <SID>SendRaw("break " . expand('%') . ':' . line('.') . ' ')<cr>
 nnoremap <silent> ;tb :call <SID>Send("tbreak " . expand('%') . ':' . line('.') . ' ')<cr>
 nnoremap <silent> ;u :call <SID>Send("until " . expand('%') . ':' . line('.') . ' ')<cr>
-nnoremap <silent> ;sb :call <SID>AddBreakpoint()<cr>
 
-nnoremap <silent> <m-pageup> :GdbFrameUp<cr>
-nnoremap <silent> <m-pagedown> :GdbFrameDown<cr>
 vnoremap <silent> <f9> :GdbEvalRange<cr>
 nnoremap <silent> <m-f9> :GdbWatchWord<cr>
 vnoremap <silent> <m-f9> :GdbWatchRange<cr>
