@@ -72,6 +72,7 @@ endfunction "}}}
 
 map <buffer> <silent> ,rr :call NormalRun(1)<CR>
 map <buffer> <silent> ,rd :call DebugRun()<cr>
+command! -nargs=0 -buffer GdbLocal call DebugRun()
 map <buffer> <silent> ,rt :call NormalRun(2)<cr>
 
 command! -buffer M call CompileCCpp(0, "Build succesfully!")
