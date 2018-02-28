@@ -1,6 +1,6 @@
 # Demo
 
-<script src="https://asciinema.org/a/dT2652AAwegDo0o0gWKsGOo1W.js" id="asciicast-dT2652AAwegDo0o0gWKsGOo1W" async></script>
+[![screencast](https://asciinema.org/a/dT2652AAwegDo0o0gWKsGOo1W.png)](https://asciinema.org/a/dT2652AAwegDo0o0gWKsGOo1W)
 
 # What is NeovimGdb
 Integrate vim and gdb, it could help you:
