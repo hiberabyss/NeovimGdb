@@ -24,10 +24,12 @@ endfunction
 
 let s:GdbPaused = vimexpect#State([
 			\ ['\v[\o32]{2}([^:]+):(\d+):\d+', 'jump'],
+			\ ['\v^\> \S+ ([^:]+):(\d+)', 'jump'],
 			\ ['Continuing.', 'continue'],
 			\ ['Starting program', 'continue'],
 			\ ['\v^Breakpoint (\d+) at 0[xX]\x+: file ([^,]+), line (\d+)', 'mybreak'],
 			\ ['\v^Breakpoint (\d+) at 0[xX]\x+: ([^:]+):(\d+)', 'mybreak'],
+			\ ['\v^Breakpoint (\d+) set at 0[xX]\x+ for \S+ ([^:]+):(\d+)', 'mybreak'],
 			\ ])
 
 let s:GdbRunning = vimexpect#State([
@@ -37,6 +39,7 @@ let s:GdbRunning = vimexpect#State([
 			\ ['\vhit Hardware ', 'pause'],
 			\ ['(gdb)', 'pause'],
 			\ ['gdb\$', 'pause'],
+			\ ['(dlv)', 'pause'],
 			\ ['\v\[Inferior\ +.{-}\ +exited\ +normally', 'disconnected'],
 			\ ])
 
@@ -45,34 +48,10 @@ function s:GdbPaused.continue(...)
 	call self.update_current_line_sign(0)
 endfunction
 
-function! <SID>GetLocalFilePath(file)
-	let paths = split(split(a:file, ':')[0], '/')
-
-	let file_path = ""
-	for i in range(-1, -len(paths), -1)
-		let search_pattern = "**/" . join(paths[i:], '/')
-		let res = split(globpath(getcwd(), search_pattern))
-		if len(res) == 0
-			return file_path
-		endif
-
-		if len(res) == 1
-			let file_path = res[0]
-			break
-		endif
-	endfor
-
-	if !empty(file_path)
-		let file_path = fnamemodify(file_path, ":~:.")
-	endif
-
-	return file_path
-endfunction
-
 function s:GdbPaused.jump(file, line, ...)
 	let file = a:file
 	if !empty(g:gdb._server_addr)
-		let file = <SID>GetLocalFilePath(file)
+		let file = util#GetLocalFilePath(file)
 	endif
 
 	if empty(file) | return -1 | endif
@@ -98,7 +77,7 @@ function! <SID>ToggleBreakpoint()
 
 	let linenr = line('.')
 	if has_key(file_breakpoints, linenr)
-		call <SID>Send("delete " . file_breakpoints[linenr]['brknum'])
+		call term#Send("delete " . file_breakpoints[linenr]['brknum'])
 		call remove(file_breakpoints, linenr)
 		exe "sign unplace"
 		return
@@ -108,7 +87,7 @@ function! <SID>ToggleBreakpoint()
 		call jobsend(g:gdb._client_id, "\<c-c>")
 		sleep 200m
 	endif
-	call <SID>Send("break " . expand('%') . ':' . line('.') . ' ')
+	call term#Send("break " . expand('%') . ':' . line('.') . ' ')
 endfunction
 
 function! s:GdbPaused.mybreak(brknum, filename, linenr, ...)
@@ -165,29 +144,14 @@ function s:Gdb.kill()
 	unlet g:gdb
 endfunction
 
-function! <SID>CreateGdbWin()
-	botright new | res 12 | setl winfixheight
-endfunction
-
-function! s:GetGdbWin()
-	if !exists('g:gdb') | return | endif
-	if g:gdb._client_buf >= 0
-		let buflist = tabpagebuflist()
-		if index(buflist, g:gdb._client_buf) >= 0 | return | endif
-		call <SID>CreateGdbWin()
-		execute('silent buffer +set\ nornu ' . g:gdb._client_buf)
-		execute('wincmd w | stopinsert')
-	endif
-endfunction
-
 function! s:Gdb.send(data)
-	call s:GetGdbWin()
+	call window#GetGdbWin()
 	call jobsend(self._client_id, "\<c-u>")
 	call jobsend(self._client_id, a:data."\<cr>")
 endfunction
 
 function! s:Gdb.sendRaw(data)
-	call s:GetGdbWin()
+	call window#GetGdbWin()
 	call jobsend(self._client_id, "\<c-u>")
 	call jobsend(self._client_id, a:data)
 endfunction
@@ -220,7 +184,12 @@ function! s:Spawn(server_host, client_cmd)
 	let gdb = vimexpect#Parser(s:GdbRunning, copy(s:Gdb))
 	let gdb._server_addr = a:server_host
 	let gdb._reconnect = 0
+
 	let gdb._initialized = 0
+    if &filetype == "go"
+        let gdb._initialized = 1
+    endif
+
 	let gdb._jump_window = 1
 	let gdb._current_buf = -1
 	let gdb._current_line = -1
@@ -231,7 +200,7 @@ function! s:Spawn(server_host, client_cmd)
 
 	let gdb._tab = tabpagenr()
 
-	call <SID>CreateGdbWin()
+	call window#CreateGdbWin()
 
 	if empty(a:server_host)
 		let gdb._client_id = termopen(a:client_cmd, gdb)
@@ -347,32 +316,14 @@ function! s:GetExpression(...) range
 	return join(lines, "\n")
 endfunction
 
-function! <SID>Send(data)
-	if !exists('g:gdb')
-		throw 'Gdb is not running'
-	endif
-	call g:gdb.send(a:data)
-endfunction
-
-function! <SID>SendRaw(data)
-	if !exists('g:gdb')
-		throw 'Gdb is not running'
-	endif
-	call g:gdb.sendRaw(a:data)
-endfunction
-
-function! <SID>Eval(expr)
-	call <SID>Send(printf('print %s', a:expr))
-endfunction
-
 function! s:Watch(expr)
 	let expr = a:expr
 	if expr[0] != '&'
 		let expr = '&' . expr
 	endif
 
-	call <SID>Eval(expr)
-	call <SID>Send('watch *$')
+	call util#Eval(expr)
+	call term#Send('watch *$')
 endfunction
 
 function! s:Interrupt()
@@ -395,49 +346,50 @@ function! s:CreateToggleBreak()
 	call s:ToggleBreak()
 endfunction
 
-function! <SID>GetCppCword()
-	let save_keyword = &iskeyword
-	set iskeyword+=.,-,>,:
-	let cword = expand('<cword>')
-	let &iskeyword = save_keyword
-	return cword
-endfunction
-
 let g:local_gdb_cmd = "gdb -q -f"
 
 if has('mac')
-	let g:local_gdb_cmd = "sudo " .g:local_gdb_cmd
+    let g:local_gdb_cmd = "sudo " .g:local_gdb_cmd
+	" let g:local_gdb_cmd = "lldb -f "
 endif
+
+function! GoDlvDebug()
+    if empty("<bang>")
+        call s:Spawn(0, "dlv debug ")
+    else
+        call s:Spawn(0, "dlv debug " .expand('%'))
+    endif
+endfunction
 
 command! -nargs=1 -complete=file GdbStart call s:Spawn(0, printf(g:local_gdb_cmd . " %s", <q-args>))
 command! -nargs=1 GdbConnect call s:Spawn(<q-args>, 0)
 command! GdbZsh call s:Spawn(0, "zsh")
-command! GdbWin call s:GetGdbWin()
+command! GdbWin call window#GetGdbWin()
 command! GdbSetBreaks call s:SetBreakpoints()
 
 command! GdbDebugStop call s:Kill()
 command! GdbToggleBreakpoint call s:CreateToggleBreak()
 command! GdbClearBreakpoints call s:ClearBreak()
 command! GdbInterrupt call s:Interrupt()
-command! GdbEvalWord call <SID>Eval(<SID>GetCppCword())
-command! -range GdbEvalRange call <SID>Eval(s:GetExpression(<f-args>))
+command! GdbEvalWord call util#Eval(util#GetCppCword())
+command! -range GdbEvalRange call util#Eval(s:GetExpression(<f-args>))
 command! GdbWatchWord call s:Watch(expand('<cword>'))
 command! -range GdbWatchRange call s:Watch(s:GetExpression(<f-args>))
 
-nnoremap <silent> ;r :call <SID>Send("run")<cr>
-nnoremap <silent> ;c :call <SID>Send("c")<cr>
-nnoremap <silent> ;n :call <SID>Send("n")<cr>
-nnoremap <silent> ;s :call <SID>Send("s")<cr>
-nnoremap <silent> ;f :call <SID>Send("finish")<cr>
+nnoremap <silent> ;r :call term#Send("run")<cr>
+nnoremap <silent> ;c :call term#Send("c")<cr>
+nnoremap <silent> ;n :call term#Send("n")<cr>
+nnoremap <silent> ;s :call term#Send("s")<cr>
+nnoremap <silent> ;f :call term#Send("finish")<cr>
 nnoremap <silent> ;b :call <SID>ToggleBreakpoint()<cr>
 nnoremap <silent> ;p :GdbEvalWord<cr>
-vnoremap <silent> ;p "vy:call <SID>Eval(@v)<cr>
+vnoremap <silent> ;p "vy:call util#Eval(@v)<cr>
 nnoremap <silent> ;gc :call GoCurrentLine()<cr>
 nnoremap <silent> ;gk :GdbDebugStop<cr>
 
-nnoremap <silent> ;gb :call <SID>SendRaw("break " . expand('%') . ':' . line('.') . ' ')<cr>
-nnoremap <silent> ;tb :call <SID>Send("tbreak " . expand('%') . ':' . line('.') . ' ')<cr>
-nnoremap <silent> ;u :call <SID>Send("until " . expand('%') . ':' . line('.') . ' ')<cr>
+nnoremap <silent> ;gb :call term#SendRaw("break " . expand('%') . ':' . line('.') . ' ')<cr>
+nnoremap <silent> ;tb :call term#Send("tbreak " . expand('%') . ':' . line('.') . ' ')<cr>
+nnoremap <silent> ;u :call term#Send("until " . expand('%') . ':' . line('.') . ' ')<cr>
 
 vnoremap <silent> <f9> :GdbEvalRange<cr>
 nnoremap <silent> <m-f9> :GdbWatchWord<cr>
