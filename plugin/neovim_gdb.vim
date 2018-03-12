@@ -133,6 +133,7 @@ let s:Gdb = {}
 
 function s:Gdb.kill()
 	if !exists('g:gdb') | return | endif
+    call util#DebuggerMapping(0)
 	call self.update_current_line_sign(0)
 	let s:breakpoints = {}
 	call s:RefreshBreakpointSigns()
@@ -169,18 +170,13 @@ function! s:Gdb.update_current_line_sign(add)
 	exe 'sign unplace '.old_line_sign_id
 endfunction
 
-function! GoCurrentLine()
-	if !exists('g:gdb')
-		return
-	endif
-	execute(":buffer " . g:gdb._current_buf)
-	execute(":" . g:gdb._current_line)
-endfunction
-
 function! s:Spawn(server_host, client_cmd)
 	if exists('g:gdb')
 		throw 'Gdb already running'
 	endif
+
+    call util#DebuggerMapping(1)
+
 	let gdb = vimexpect#Parser(s:GdbRunning, copy(s:Gdb))
 	let gdb._server_addr = a:server_host
 	let gdb._reconnect = 0
@@ -350,7 +346,6 @@ let g:local_gdb_cmd = "gdb -q -f"
 
 if has('mac')
     let g:local_gdb_cmd = "sudo " .g:local_gdb_cmd
-	" let g:local_gdb_cmd = "lldb -f "
 endif
 
 function! GoDlvDebug()
@@ -376,21 +371,20 @@ command! -range GdbEvalRange call util#Eval(s:GetExpression(<f-args>))
 command! GdbWatchWord call s:Watch(expand('<cword>'))
 command! -range GdbWatchRange call s:Watch(s:GetExpression(<f-args>))
 
-nnoremap <silent> ;r :call term#Send("run")<cr>
-nnoremap <silent> ;c :call term#Send("c")<cr>
-nnoremap <silent> ;n :call term#Send("n")<cr>
-nnoremap <silent> ;s :call term#Send("s")<cr>
-nnoremap <silent> ;f :call term#Send("finish")<cr>
+let g:vim_debugger_mapping = {
+            \ ';r' : "run",
+            \ ';c' : "c",
+            \ ';n' : "n",
+            \ ';s' : "s",
+            \ ';f' : "finish",
+            \ }
+
 nnoremap <silent> ;b :call <SID>ToggleBreakpoint()<cr>
 nnoremap <silent> ;p :GdbEvalWord<cr>
 vnoremap <silent> ;p "vy:call util#Eval(@v)<cr>
-nnoremap <silent> ;gc :call GoCurrentLine()<cr>
+nnoremap <silent> ;gc :call util#GoCurrentLine()<cr>
 nnoremap <silent> ;gk :GdbDebugStop<cr>
 
-nnoremap <silent> ;gb :call term#SendRaw("break " . expand('%') . ':' . line('.') . ' ')<cr>
-nnoremap <silent> ;tb :call term#Send("tbreak " . expand('%') . ':' . line('.') . ' ')<cr>
-nnoremap <silent> ;u :call term#Send("until " . expand('%') . ':' . line('.') . ' ')<cr>
-
-vnoremap <silent> <f9> :GdbEvalRange<cr>
-nnoremap <silent> <m-f9> :GdbWatchWord<cr>
-vnoremap <silent> <m-f9> :GdbWatchRange<cr>
+nnoremap <silent> ;gb :call term#SendRaw(printf("break %s:%d ", expand('%'), line('.')))<cr>
+nnoremap <silent> ;tb :call term#Send(printf("tbreak %s:%d", expand('%'), line('.')))<cr>
+nnoremap <silent> ;u :call term#Send(printf("until %s:%d", expand('%'), line('.')))<cr>

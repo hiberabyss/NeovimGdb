@@ -34,3 +34,24 @@ function! util#GetCppCword()
 	return cword
 endfunction
 
+function! util#GoCurrentLine()
+	if !exists('g:gdb')
+		return
+	endif
+	execute(":buffer " . g:gdb._current_buf)
+	execute(":" . g:gdb._current_line)
+endfunction
+
+function! util#DebuggerMapping(load)
+    if ! exists('g:vim_debugger_mapping')
+        return
+    endif
+
+    for k in keys(g:vim_debugger_mapping)
+        if a:load
+            execute(printf(':nnoremap <silent> %s :call term#Send("%s")<cr>', k, g:vim_debugger_mapping[k]))
+        else
+            execute(printf(':unmap %s', k))
+        endif
+    endfor
+endfunction
