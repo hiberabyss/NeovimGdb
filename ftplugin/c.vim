@@ -55,7 +55,8 @@ function! NormalRun(flag) "{{{
     if CompileCCpp(a:flag, "") < 0 | return | endif
 	let binary = b:binary_filename
 	botright new | res 12
-	let cmd = binary ." ; if [[ $? == 139 ]]; then echo 'Segmentation Fault'; fi"
+	" let cmd = binary ." ; if [[ $? == 139 ]]; then echo 'Segmentation Fault'; fi"
+	let cmd = binary ." ; errcode=$?; if [[ $errcode -gt 128 ]]; then echo \"System Error! Errno: $errcode\"; fi"
 	call termopen(cmd)
 	startinsert
 endfunction "}}}
