@@ -1,4 +1,3 @@
-
 function! window#CreateGdbWin()
 	botright new | res 12 | setl winfixheight
 endfunction

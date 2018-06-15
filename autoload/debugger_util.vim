@@ -1,8 +1,8 @@
-function! util#Eval(expr)
-	call term#Send(printf('print %s', a:expr))
+function! debugger_util#Eval(expr)
+	call debugger_term#Send(printf('print %s', a:expr))
 endfunction
 
-function! util#GetLocalFilePath(file)
+function! debugger_util#GetLocalFilePath(file)
 	let paths = split(split(a:file, ':')[0], '/')
 
 	let file_path = ""
@@ -26,7 +26,7 @@ function! util#GetLocalFilePath(file)
 	return file_path
 endfunction
 
-function! util#GetCppCword()
+function! debugger_util#GetCppCword()
 	let save_keyword = &iskeyword
 	set iskeyword+=.,-,>,:
 	let cword = expand('<cword>')
@@ -34,7 +34,7 @@ function! util#GetCppCword()
 	return cword
 endfunction
 
-function! util#GoCurrentLine()
+function! debugger_util#GoCurrentLine()
 	if !exists('g:gdb')
 		return
 	endif
@@ -42,14 +42,14 @@ function! util#GoCurrentLine()
 	execute(":" . g:gdb._current_line)
 endfunction
 
-function! util#DebuggerMapping(load)
+function! debugger_util#DebuggerMapping(load)
     if ! exists('g:vim_debugger_mapping')
         return
     endif
 
     for k in keys(g:vim_debugger_mapping)
         if a:load
-            execute(printf(':nnoremap <silent> %s :call term#Send("%s")<cr>', k, g:vim_debugger_mapping[k]))
+            execute(printf(':nnoremap <silent> %s :call debugger_term#Send("%s")<cr>', k, g:vim_debugger_mapping[k]))
         else
             execute(printf(':unmap %s', k))
         endif

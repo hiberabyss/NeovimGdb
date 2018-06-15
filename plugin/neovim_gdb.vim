@@ -51,7 +51,7 @@ endfunction
 function s:GdbPaused.jump(file, line, ...)
 	let file = a:file
 	if !empty(g:gdb._server_addr)
-		let file = util#GetLocalFilePath(file)
+		let file = debugger_util#GetLocalFilePath(file)
 	endif
 
 	if empty(file) | return -1 | endif
@@ -77,7 +77,7 @@ function! <SID>ToggleBreakpoint()
 
 	let linenr = line('.')
 	if has_key(file_breakpoints, linenr)
-		call term#Send("delete " . file_breakpoints[linenr]['brknum'])
+		call debugger_term#Send("delete " . file_breakpoints[linenr]['brknum'])
 		call remove(file_breakpoints, linenr)
 		exe "sign unplace"
 		return
@@ -87,7 +87,7 @@ function! <SID>ToggleBreakpoint()
 		call jobsend(g:gdb._client_id, "\<c-c>")
 		sleep 200m
 	endif
-	call term#Send("break " . expand('%') . ':' . line('.') . ' ')
+	call debugger_term#Send("break " . expand('%') . ':' . line('.') . ' ')
 endfunction
 
 function! s:GdbPaused.mybreak(brknum, filename, linenr, ...)
@@ -133,7 +133,7 @@ let s:Gdb = {}
 
 function s:Gdb.kill()
 	if !exists('g:gdb') | return | endif
-    call util#DebuggerMapping(0)
+    call debugger_util#DebuggerMapping(0)
 	call self.update_current_line_sign(0)
 	let s:breakpoints = {}
 	call s:RefreshBreakpointSigns()
@@ -175,7 +175,7 @@ function! s:Spawn(server_host, client_cmd)
 		throw 'Gdb already running'
 	endif
 
-    call util#DebuggerMapping(1)
+    call debugger_util#DebuggerMapping(1)
 
 	let gdb = vimexpect#Parser(s:GdbRunning, copy(s:Gdb))
 	let gdb._server_addr = a:server_host
@@ -318,8 +318,8 @@ function! s:Watch(expr)
 		let expr = '&' . expr
 	endif
 
-	call util#Eval(expr)
-	call term#Send('watch *$')
+	call debugger_util#Eval(expr)
+	call debugger_term#Send('watch *$')
 endfunction
 
 function! s:Interrupt()
@@ -366,8 +366,8 @@ command! GdbDebugStop call s:Kill()
 command! GdbToggleBreakpoint call s:CreateToggleBreak()
 command! GdbClearBreakpoints call s:ClearBreak()
 command! GdbInterrupt call s:Interrupt()
-command! GdbEvalWord call util#Eval(util#GetCppCword())
-command! -range GdbEvalRange call util#Eval(s:GetExpression(<f-args>))
+command! GdbEvalWord call debugger_util#Eval(debugger_util#GetCppCword())
+command! -range GdbEvalRange call debugger_util#Eval(s:GetExpression(<f-args>))
 command! GdbWatchWord call s:Watch(expand('<cword>'))
 command! -range GdbWatchRange call s:Watch(s:GetExpression(<f-args>))
 
@@ -381,10 +381,10 @@ let g:vim_debugger_mapping = {
 
 nnoremap <silent> ;b :call <SID>ToggleBreakpoint()<cr>
 nnoremap <silent> ;p :GdbEvalWord<cr>
-vnoremap <silent> ;p "vy:call util#Eval(@v)<cr>
-nnoremap <silent> ;gc :call util#GoCurrentLine()<cr>
+vnoremap <silent> ;p "vy:call debugger_util#Eval(@v)<cr>
+nnoremap <silent> ;gc :call debugger_util#GoCurrentLine()<cr>
 nnoremap <silent> ;gk :GdbDebugStop<cr>
 
-nnoremap <silent> ;gb :call term#SendRaw(printf("break %s:%d ", expand('%'), line('.')))<cr>
-nnoremap <silent> ;tb :call term#Send(printf("tbreak %s:%d", expand('%'), line('.')))<cr>
-nnoremap <silent> ;u :call term#Send(printf("until %s:%d", expand('%'), line('.')))<cr>
+nnoremap <silent> ;gb :call debugger_term#SendRaw(printf("break %s:%d ", expand('%'), line('.')))<cr>
+nnoremap <silent> ;tb :call debugger_term#Send(printf("tbreak %s:%d", expand('%'), line('.')))<cr>
+nnoremap <silent> ;u :call debugger_term#Send(printf("until %s:%d", expand('%'), line('.')))<cr>
