@@ -87,7 +87,9 @@ function! <SID>ToggleBreakpoint()
 		call jobsend(g:gdb._client_id, "\<c-c>")
 		sleep 200m
 	endif
-	call debugger_term#Send("break " . expand('%') . ':' . line('.') . ' ')
+
+	let trimed_filename = expand('%:p:h:t') .'/'. expand('%:t')
+	call debugger_term#Send(printf('break %s:%d ', trimed_filename, line('.')))
 endfunction
 
 function! s:GdbPaused.mybreak(brknum, filename, linenr, ...)
@@ -203,21 +205,29 @@ function! s:Spawn(server_host, client_cmd)
 	else
 		let gdb._client_id = termopen('zsh', gdb)
 
-		if has_key(g:nvimgdb_host_cmd, a:server_host)
-			let commands = g:nvimgdb_host_cmd[a:server_host]
+		let items = split(a:server_host, ':')
+		let ssh_host = items[0]
+		let ssh_cmd = printf('ssh %s', ssh_host)
+		if len(items) > 1
+			let ssh_port = items[1]
+			let ssh_cmd = printf('ssh %s -p %s', ssh_host, ssh_port)
+		endif
+
+		if has_key(g:nvimgdb_host_cmd, ssh_host)
+			let commands = g:nvimgdb_host_cmd[ssh_host]
 
 			if commands[0] == 'Docker'
 				call jobsend(gdb._client_id, "docker exec -it " .a:server_host. " bash\<cr>")
 				let commands = commands[1:]
 			else
-				call jobsend(gdb._client_id, "ssh " .a:server_host. "\<cr>")
+				call jobsend(gdb._client_id, ssh_cmd ." \<cr>")
 			endif
 
 			for cmd in commands
 				call jobsend(gdb._client_id, cmd . "\<cr>")
 			endfor
 		else
-			call jobsend(gdb._client_id, "ssh " .a:server_host. "\<cr>")
+			call jobsend(gdb._client_id, ssh_cmd .' \<cr>')
 		endif
 	endif
 
@@ -362,7 +372,7 @@ command! GdbZsh call s:Spawn(0, "zsh")
 command! GdbWin call window#GetGdbWin()
 command! GdbSetBreaks call s:SetBreakpoints()
 
-command! GdbDebugStop call s:Kill()
+command! GdbStop call s:Kill()
 command! GdbToggleBreakpoint call s:CreateToggleBreak()
 command! GdbClearBreakpoints call s:ClearBreak()
 command! GdbInterrupt call s:Interrupt()
