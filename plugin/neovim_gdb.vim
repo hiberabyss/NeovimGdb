@@ -23,8 +23,9 @@ function s:GdbServer.on_exit()
 endfunction
 
 let s:GdbPaused = vimexpect#State([
-			\ ['\v[\o32]{2}([^:]+):(\d+):\d+', 'jump'],
-			\ ['\v^\> \S+ ([^:]+):(\d+)', 'jump'],
+			\ ['\v[\o32]{2}(\f+):(\d+):\d+', 'jump'],
+			\ ['\v^(\f+):(\d+):\d+', 'jump'],
+			\ ['\v^\> \S+ (\f+):(\d+)', 'jump'],
 			\ ['Continuing.', 'continue'],
 			\ ['Starting program', 'continue'],
 			\ ['\v^Breakpoint (\d+) at 0[xX]\x+: file ([^,]+), line (\d+)', 'mybreak'],
@@ -227,7 +228,7 @@ function! s:Spawn(server_host, client_cmd)
 				call jobsend(gdb._client_id, cmd . "\<cr>")
 			endfor
 		else
-			call jobsend(gdb._client_id, ssh_cmd .' \<cr>')
+			call jobsend(gdb._client_id, ssh_cmd ." \<cr>")
 		endif
 	endif
 
