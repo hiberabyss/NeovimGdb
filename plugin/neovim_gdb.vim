@@ -394,7 +394,7 @@ nnoremap <silent> ;b :call <SID>ToggleBreakpoint()<cr>
 nnoremap <silent> ;p :GdbEvalWord<cr>
 vnoremap <silent> ;p "vy:call debugger_util#Eval(@v)<cr>
 nnoremap <silent> ;gc :call debugger_util#GoCurrentLine()<cr>
-nnoremap <silent> ;gk :GdbDebugStop<cr>
+nnoremap <silent> ;gk :GdbStop<cr>
 
 nnoremap <silent> ;gb :call debugger_term#SendRaw(printf("break %s:%d ", expand('%'), line('.')))<cr>
 nnoremap <silent> ;tb :call debugger_term#Send(printf("tbreak %s:%d", expand('%'), line('.')))<cr>
