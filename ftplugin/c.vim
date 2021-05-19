@@ -1,4 +1,4 @@
-if exists('b:loaded_onekeycompile')
+if exists('b:loaded_onekeycompile') || exists('g:loaded_onekeycompile')
   finish
 endif
 
