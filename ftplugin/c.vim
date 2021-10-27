@@ -7,9 +7,9 @@ let b:loaded_onekeycompile = 1
 let b:binary_filename = expand('%:p:r') . '.bin'
 let b:makeprg = {}
 let b:makeprg.c   = "clang -std=c99 -Wall % -o " . b:binary_filename
-let b:makeprg.cpp = "g++ -Wall -std=c++11 % -o " . b:binary_filename
-let b:makeprg.gdb = "g++ -Wall -g -O0 -std=c++11 % -o " . b:binary_filename
-let b:makeprg.gtest = "g++ -Wall -lgmock_main -lgmock -g -O0 -std=c++11 % -o " . b:binary_filename
+let b:makeprg.cpp = "g++ -Wall -std=c++17 % -o " . b:binary_filename
+let b:makeprg.gdb = "g++ -Wall -g -O0 -std=c++17 % -o " . b:binary_filename
+let b:makeprg.gtest = "g++ -Wall -lgmock_main -lgmock -g -O0 -std=c++17 % -o " . b:binary_filename
 
 function! s:ErrReturn(msg)
 	echohl ErrorMsg | echom a:msg | echohl None
@@ -71,7 +71,7 @@ endfunction "}}}
 
 " nmap <buffer> <A-]> :<C-U>call JumpToClassMemberByDecl('tj')<cr>
 
-map <buffer> <silent> ,rr :call NormalRun(1)<CR>
+nmap <buffer> <silent> ,rr :call NormalRun(1)<CR>
 map <buffer> <silent> ,rd :call DebugRun()<cr>
 command! -nargs=0 -buffer GdbLocal call DebugRun()
 map <buffer> <silent> ,rt :call NormalRun(2)<cr>
